@@ -9,61 +9,60 @@ on:
 
 env:
   TF_IN_AUTOMATION: true
+  TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
 
 jobs:
   # ==========================================================================
   # STAGE 1: VALIDATION - Lint and validate all code
   # ==========================================================================
   validate-repository:
-    name: "📋 Validate Repository"
+    name: "Validate Repository"
     runs-on: ubuntu-latest
     steps:
-      - name: "🔍 Checkout Repository"
+      - name: "Checkout Repository"
         uses: actions/checkout@v4
 
-      - name: "🐍 Setup Python 3.13"
+      - name: "Setup Python 3.13"
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
-      - name: "📦 Install Python Dependencies"
+      - name: "Install Python Dependencies"
         run: |
           pip install -r requirements.txt
           ansible-galaxy collection install -r requirements.yml || true
 
-      - name: "🔧 Ansible Lint"
+      - name: "Ansible Lint"
         run: |
-          echo "Running Ansible lint checks..."
           ansible-lint --version
-          ansible-lint || echo "⚠️ Ansible lint warnings found"
+          ansible-lint || echo "Ansible lint warnings found"
 
-      - name: "🏗️ Setup Terraform"
+      - name: "Setup Terraform"
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.7.5
 
-      - name: "🔧 Terraform Init (Validation Mode)"
+      - name: "Terraform Init (Validation Mode)"
         working-directory: terraform
         run: terraform init -input=false -backend=false
 
-      - name: "✅ Terraform Validate"
+      - name: "Terraform Validate"
         working-directory: terraform
         run: terraform validate
 
-      - name: "📐 Terraform Format Check"
+      - name: "Terraform Format Check"
         working-directory: terraform
         run: |
           if ! terraform fmt -check; then
-            echo "❌ Terraform formatting issues found. Run 'terraform fmt' to fix."
+            echo "Terraform formatting issues found. Run 'terraform fmt' to fix."
             exit 1
           fi
-          echo "✅ Terraform formatting is correct"
 
   # ==========================================================================
   # STAGE 2: TERRAFORM PLAN - Plan infrastructure changes (runs on PR & main)
   # ==========================================================================
   terraform-plan:
-    name: "🗺️ Terraform Plan"
+    name: "Terraform Plan"
     needs: validate-repository
     runs-on: ubuntu-latest
     permissions:
@@ -73,41 +72,43 @@ jobs:
     outputs:
       plan-output: ${{ steps.plan.outputs.stdout }}
     steps:
-      - name: "🔍 Checkout Repository"
+      - name: "Checkout Repository"
         uses: actions/checkout@v4
 
-      - name: "🏗️ Setup Terraform"
+      - name: "Setup Terraform"
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.7.5
           terraform_wrapper: false
 
-      - name: "🔐 Authenticate to GCP"
+      - name: "Authenticate to GCP"
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
 
-      - name: "⚙️ Configure gcloud"
+      - name: "Configure gcloud"
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: "🔄 Terraform Init"
+      - name: "Terraform Init"
         working-directory: terraform
         run: |
-          echo "🔄 Initializing Terraform..."
-          terraform init -input=false -backend-config=config/backend.hcl
+          terraform init \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="prefix=terraform"
 
-      - name: "📋 Terraform Plan"
+      - name: "Terraform Plan"
         id: plan
         working-directory: terraform
         run: |
-          echo "📋 Creating Terraform execution plan..."
-          terraform plan -input=false -detailed-exitcode \
+          terraform plan \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="prefix=terraform" \
             -var-file=config/terraform.tfvars \
             -out=tfplan
         continue-on-error: true
 
-      - name: "💾 Save Terraform Plan"
+      - name: "Save Terraform Plan"
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan
@@ -118,7 +119,7 @@ jobs:
   # STAGE 3: TERRAFORM APPLY - Deploy infrastructure (main branch only)
   # ==========================================================================
   terraform-apply:
-    name: "🚀 Terraform Apply"
+    name: "Terraform Apply"
     needs: [validate-repository, terraform-plan]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
@@ -127,44 +128,42 @@ jobs:
       id-token: write
     environment: production  # Require approval for production deployments
     steps:
-      - name: "🔍 Checkout Repository"
+      - name: "Checkout Repository"
         uses: actions/checkout@v4
 
-      - name: "🏗️ Setup Terraform"
+      - name: "Setup Terraform"
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.7.5
 
-      - name: "🔐 Authenticate to GCP"
+      - name: "Authenticate to GCP"
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
 
-      - name: "⚙️ Configure gcloud"
+      - name: "Configure gcloud"
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: "🔄 Terraform Init"
+      - name: "Terraform Init"
         working-directory: terraform
         run: |
-          echo "🔄 Initializing Terraform..."
-          terraform init -input=false -backend-config=config/backend.hcl
+          terraform init \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="prefix=terraform"
 
-      - name: "🚀 Terraform Apply"
+      - name: "Terraform Apply"
         working-directory: terraform
         run: |
-          echo "🚀 Applying Terraform configuration..."
           terraform apply -auto-approve -input=false \
             -var-file=config/terraform.tfvars
 
-      - name: "📊 Terraform Output"
+      - name: "Terraform Output"
         working-directory: terraform
         run: |
-          echo "📊 Collecting Terraform outputs..."
           terraform output -json > tf-output.json
-          echo "Infrastructure deployment completed successfully! ✅"
 
-      - name: "💾 Upload Terraform Outputs"
+      - name: "Upload Terraform Outputs"
         uses: actions/upload-artifact@v4
         with:
           name: terraform-outputs
@@ -175,7 +174,7 @@ jobs:
   # STAGE 4: DEPLOY ANSIBLE CONFIGS - Push to GCS to trigger Cloud Build
   # ==========================================================================
   deploy-ansible-configs:
-    name: "📦 Deploy Ansible Configurations"
+    name: "Deploy Ansible Configurations"
     needs: [validate-repository, terraform-apply]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
@@ -183,22 +182,20 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - name: "🔍 Checkout Repository"
+      - name: "Checkout Repository"
         uses: actions/checkout@v4
 
-      - name: "🔐 Authenticate to GCP"
+      - name: "Authenticate to GCP"
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
 
-      - name: "⚙️ Configure gcloud"
+      - name: "Configure gcloud"
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: "📦 Create Ansible Archive"
+      - name: "Create Ansible Archive"
         run: |
-          echo "📦 Creating Ansible configuration archive..."
-          
           # Create archive excluding terraform directory and CI files
           tar -czf ansible-configs.tar.gz \
             --exclude='terraform' \
@@ -207,17 +204,12 @@ jobs:
             --exclude='*.md' \
             --exclude='requirements.txt' \
             .
-          
-          echo "📊 Archive contents:"
-          tar -tzf ansible-configs.tar.gz | head -20
 
-      - name: "☁️ Upload to GCS Bucket"
+      - name: "Upload to GCS Bucket"
         run: |
-          echo "☁️ Uploading Ansible configurations to GCS..."
-          
           # Upload the archive
           gsutil cp ansible-configs.tar.gz gs://${{ secrets.ANSIBLE_BUCKET_NAME }}/
-          
+
           # Upload individual files for direct access
           gsutil -m rsync -r -d \
             --exclude='terraform/**' \
@@ -226,29 +218,26 @@ jobs:
             --exclude='*.md' \
             --exclude='requirements.txt' \
             . gs://${{ secrets.ANSIBLE_BUCKET_NAME }}/
-          
+
           # Set metadata to trigger Cloud Build
           gsutil setmeta -h "x-goog-meta-deployed-by:github-actions" \
             -h "x-goog-meta-commit-sha:${{ github.sha }}" \
             -h "x-goog-meta-deploy-time:$(date -u +%Y%m%d-%H%M%S)" \
             gs://${{ secrets.ANSIBLE_BUCKET_NAME }}/ansible-configs.tar.gz
-          
-          echo "✅ Ansible configurations deployed successfully!"
-          echo "🔄 Cloud Build will now automatically configure the infrastructure..."
 
-      - name: "📊 Deployment Summary"
+      - name: "Deployment Summary"
         run: |
-          echo "## 🎉 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Infrastructure Status" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Terraform validation passed" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Infrastructure deployed successfully" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Ansible configurations uploaded to GCS" >> $GITHUB_STEP_SUMMARY
+          echo "- Terraform validation passed" >> $GITHUB_STEP_SUMMARY
+          echo "- Infrastructure deployed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- Ansible configurations uploaded to GCS" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. 🔄 Cloud Build will automatically trigger" >> $GITHUB_STEP_SUMMARY
-          echo "2. 🤖 Ansible Controller will configure all hosts" >> $GITHUB_STEP_SUMMARY
-          echo "3. 📊 Check Cloud Build logs for configuration status" >> $GITHUB_STEP_SUMMARY
+          echo "1. Cloud Build will automatically trigger" >> $GITHUB_STEP_SUMMARY
+          echo "2. Ansible Controller will configure all hosts" >> $GITHUB_STEP_SUMMARY
+          echo "3. Check Cloud Build logs for configuration status" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Useful Commands" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
@@ -256,6 +245,7 @@ jobs:
           echo "gcloud builds list --limit=5" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# View controller logs" >> $GITHUB_STEP_SUMMARY
-          echo "gcloud compute ssh controller --zone=${{ secrets.GCP_ZONE || 'us-central1-a' }} --command='sudo journalctl -u google-startup-scripts.service -f'" >> $GITHUB_STEP_SUMMARY
+          echo "gcloud compute ssh controller \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --zone=${{ secrets.GCP_ZONE || 'us-central1-a' }} \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --command='sudo journalctl -u google-startup-scripts.service -f'" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-

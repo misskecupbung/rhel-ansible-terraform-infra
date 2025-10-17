@@ -1,11 +1,11 @@
 ---
 - name: Install httpd
-  package:
+  ansible.builtin.package:
     name: httpd
     state: present
 
 - name: Ensure index page
-  copy:
+  ansible.builtin.copy:
     dest: /var/www/html/index.html
     content: "<html><body><h1>RHEL Web Server</h1></body></html>"
     owner: root
@@ -14,7 +14,7 @@
   notify: Restart httpd
 
 - name: Enable and start httpd
-  service:
+  ansible.builtin.service:
     name: httpd
     state: started
-    enabled: yes
+    enabled: true

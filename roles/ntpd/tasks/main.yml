@@ -1,18 +1,18 @@
 ---
 - name: Install ntp (chrony alternative for server role)
-  package:
+  ansible.builtin.package:
     name: ntp
     state: present
 
 - name: Configure /etc/ntp.conf basic servers
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: /etc/ntp.conf
     regexp: '^server '
     line: 'server 0.pool.ntp.org iburst'
   notify: Restart ntpd
 
 - name: Ensure ntpd running
-  service:
+  ansible.builtin.service:
     name: ntpd
     state: started
-    enabled: yes
+    enabled: true

@@ -1,11 +1,11 @@
 ---
 - name: Ensure openssh server installed
-  package:
+  ansible.builtin.package:
     name: openssh-server
     state: present
 
 - name: Harden sshd_config
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
     regexp: '^{{ item.key }}'
     line: '{{ item.key }} {{ item.value }}'
@@ -20,7 +20,7 @@
   notify: Restart sshd
 
 - name: Ensure secure permissions on sshd_config
-  file:
+  ansible.builtin.file:
     path: /etc/ssh/sshd_config
     owner: root
     group: root

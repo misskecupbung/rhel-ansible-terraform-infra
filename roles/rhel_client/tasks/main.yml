@@ -1,17 +1,17 @@
 ---
 - name: Install baseline packages
-  package:
+  ansible.builtin.package:
     name: ["vim", "git", "curl"]
     state: present
 
 - name: Ensure SELinux enforcing
-  selinux:
+  ansible.posix.selinux:
     policy: targeted
     state: enforcing
 
 - name: Ensure timezone UTC
-  file:
+  ansible.builtin.file:
     src: /usr/share/zoneinfo/UTC
     dest: /etc/localtime
     state: link
-    force: yes
+    force: true
