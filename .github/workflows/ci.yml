@@ -9,7 +9,7 @@ on:
 
 env:
   TF_IN_AUTOMATION: true
-  TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
   # ==========================================================================
@@ -94,7 +94,7 @@ jobs:
         working-directory: terraform
         run: |
           terraform init \
-            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="bucket=$GCP_PROJECT_ID-tfstate" \
             -backend-config="prefix=terraform"
 
       - name: "Terraform Plan"
@@ -102,6 +102,9 @@ jobs:
         working-directory: terraform
         run: |
           terraform plan \
+            -var="project_id=$GCP_PROJECT_ID" \
+            -var="ansible_bucket_name=$GCP_PROJECT_ID-ansible" \
+            -var="terraform_state_bucket=$GCP_PROJECT_ID-tfstate" \
             -var-file=config/terraform.tfvars \
             -out=tfplan
         continue-on-error: true
@@ -147,13 +150,16 @@ jobs:
         working-directory: terraform
         run: |
           terraform init \
-            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="bucket=$GCP_PROJECT_ID-tfstate" \
             -backend-config="prefix=terraform"
 
       - name: "Terraform Apply"
         working-directory: terraform
         run: |
           terraform apply -auto-approve -input=false \
+            -var="project_id=$GCP_PROJECT_ID" \
+            -var="ansible_bucket_name=$GCP_PROJECT_ID-ansible" \
+            -var="terraform_state_bucket=$GCP_PROJECT_ID-tfstate" \
             -var-file=config/terraform.tfvars
 
       - name: "Terraform Output"
@@ -206,7 +212,7 @@ jobs:
       - name: "Upload to GCS Bucket"
         run: |
           # Upload the archive
-          gsutil cp ansible-configs.tar.gz gs://${{ secrets.ANSIBLE_BUCKET_NAME }}/
+          gsutil cp ansible-configs.tar.gz gs://$GCP_PROJECT_ID-ansible/
 
           # Upload individual files for direct access
           gsutil -m rsync -r -d \
@@ -215,13 +221,13 @@ jobs:
             --exclude='.git/**' \
             --exclude='*.md' \
             --exclude='requirements.txt' \
-            . gs://${{ secrets.ANSIBLE_BUCKET_NAME }}/
+            . gs://$GCP_PROJECT_ID-ansible/
 
           # Set metadata to trigger Cloud Build
           gsutil setmeta -h "x-goog-meta-deployed-by:github-actions" \
             -h "x-goog-meta-commit-sha:${{ github.sha }}" \
             -h "x-goog-meta-deploy-time:$(date -u +%Y%m%d-%H%M%S)" \
-            gs://${{ secrets.ANSIBLE_BUCKET_NAME }}/ansible-configs.tar.gz
+            gs://$GCP_PROJECT_ID-ansible/ansible-configs.tar.gz
 
       - name: "Deployment Summary"
         run: |
