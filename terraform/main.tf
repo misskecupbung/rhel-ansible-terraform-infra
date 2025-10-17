@@ -75,22 +75,30 @@ resource "google_storage_notification" "ansible_bucket_notify" {
   topic          = google_pubsub_topic.ansible_updates.id
   payload_format = "JSON_API_V1"
   event_types    = ["OBJECT_FINALIZE", "OBJECT_DELETE"]
+  
+  # Ensure IAM permissions are set before creating notification
+  depends_on = [google_project_iam_member.gcs_pubsub_publisher]
 }
 
 # Cloud Build trigger listening to Pub/Sub
 resource "google_cloudbuild_trigger" "ansible_sync" {
-  name        = var.cloud_build_trigger_name
-  description = "Run playbook when Ansible bucket changes"
+  name               = var.cloud_build_trigger_name
+  description        = "Run playbook when Ansible bucket changes"
+  service_account    = google_service_account.ansible.id
+  
   pubsub_config {
-    topic                 = google_pubsub_topic.ansible_updates.id
-    service_account_email = google_service_account.ansible.email
-    subscription          = null
+    topic = google_pubsub_topic.ansible_updates.id
   }
+  
   substitutions = {
     _ANSIBLE_BUCKET = google_storage_bucket.ansible.name
     _ZONE           = var.zone
   }
+  
   filename = "cloudbuild.yaml"
+  
+  # Ensure dependencies are met
+  depends_on = [google_pubsub_topic.ansible_updates, google_service_account.ansible]
 }
 
 # Firewall rule allowing SSH between controller and managed hosts (simplified)
