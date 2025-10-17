@@ -107,7 +107,6 @@ jobs:
             -var="terraform_state_bucket=$GCP_PROJECT_ID-tfstate" \
             -var-file=config/terraform.tfvars \
             -out=tfplan
-        continue-on-error: true
 
       - name: "Save Terraform Plan"
         uses: actions/upload-artifact@v4
