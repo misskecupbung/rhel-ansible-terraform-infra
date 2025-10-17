@@ -9,6 +9,11 @@ data "google_compute_image" "rhel" {
   project = var.rhel_image_project
 }
 
+# Get the Google Cloud Storage service account for this project
+data "google_storage_project_service_account" "gcs_account" {
+  project = var.project_id
+}
+
 resource "google_service_account" "ansible" {
   account_id   = var.service_account_id
   display_name = "Ansible Controller SA"
@@ -39,6 +44,14 @@ resource "google_project_iam_member" "sa_monitoring" {
   project = var.project_id
   role    = "roles/monitoring.metricWriter"
   member  = "serviceAccount:${google_service_account.ansible.email}"
+}
+
+# Grant Google Cloud Storage service account permission to publish to Pub/Sub
+# This is required for Storage → Pub/Sub notifications
+resource "google_project_iam_member" "gcs_pubsub_publisher" {
+  project = var.project_id
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${data.google_storage_project_service_account.gcs_account.email_address}"
 }
 
 # Storage bucket to hold Ansible content

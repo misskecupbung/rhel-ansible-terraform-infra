@@ -48,6 +48,7 @@ gcloud services enable compute.googleapis.com
 gcloud services enable storage.googleapis.com
 gcloud services enable iam.googleapis.com
 gcloud services enable pubsub.googleapis.com
+gcloud services enable cloudbuild.googleapis.com
 ```
 
 **Wait for APIs to be fully enabled (may take a few minutes)**
@@ -92,6 +93,20 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
     --role="roles/compute.securityAdmin"
+
+# Roles for service account and Pub/Sub management
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/iam.serviceAccountAdmin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/pubsub.admin"
+
+# Cloud Build for automation and trigger management
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/cloudbuild.builds.editor"
 ```
 
 ### 5. Create Workload Identity Pool
@@ -213,50 +228,3 @@ gsutil iam get gs://$ANSIBLE_BUCKET_NAME
 # List enabled APIs
 gcloud services list --enabled --filter="name:compute OR name:storage OR name:iam"
 ```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **API not enabled**: Ensure all required APIs are enabled and wait for propagation
-2. **Permission denied**: Verify service account has correct IAM roles
-3. **Workload Identity issues**: Check attribute conditions and repository name
-4. **Bucket access**: Ensure bucket name is globally unique and permissions are set
-
-### Useful Commands
-
-```bash
-# Check current project
-gcloud config get-value project
-
-# List service accounts
-gcloud iam service-accounts list
-
-# Check project number
-gcloud projects describe $PROJECT_ID --format="value(projectNumber)"
-
-# Test service account permissions
-gcloud auth list
-```
-
-## Security Considerations
-
-- **Principle of Least Privilege**: Only grant minimum required permissions
-- **Workload Identity**: Never use service account keys in GitHub secrets
-- **Repository Protection**: Ensure branch protection rules are enabled
-- **Secret Management**: Regularly rotate secrets and review access
-
-## Next Steps
-
-After completing these prerequisites:
-
-1. ✅ Push code to the `main` branch to trigger the CI/CD pipeline
-2. ✅ Monitor GitHub Actions workflow execution
-3. ✅ Verify Terraform resources are created in GCP
-4. ✅ Check Ansible playbook execution logs
-
-## Resources
-
-- [Workload Identity Federation Documentation](https://cloud.google.com/iam/docs/workload-identity-federation)
-- [GitHub Actions OIDC Documentation](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect)
-- [Google Cloud IAM Best Practices](https://cloud.google.com/iam/docs/using-iam-securely)
