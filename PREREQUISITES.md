@@ -31,8 +31,6 @@ export POOL_ID="github-actions-pool"
 export PROVIDER_ID="github-actions-provider"
 export SERVICE_ACCOUNT_NAME="github-actions-sa"
 export GITHUB_REPO="misskecupbung/rhel-ansible-terraform-infra"
-export ANSIBLE_BUCKET_NAME="$PROJECT_ID-ansible"  # Replace with unique bucket name
-export TF_STATE_BUCKET="$PROJECT_ID-tfstate"
 export REGION="us-central1"                            # Change to your preferred region
 ```
 
@@ -49,6 +47,7 @@ gcloud services enable cloudresourcemanager.googleapis.com
 gcloud services enable compute.googleapis.com
 gcloud services enable storage.googleapis.com
 gcloud services enable iam.googleapis.com
+gcloud services enable pubsub.googleapis.com
 ```
 
 **Wait for APIs to be fully enabled (may take a few minutes)**
@@ -134,12 +133,10 @@ gcloud iam service-accounts add-iam-policy-binding $SERVICE_ACCOUNT_EMAIL \
 
 ```bash
 # Create bucket for Ansible artifacts and Terraform state (if needed)
-gsutil mb -p $PROJECT_ID -c STANDARD -l $REGION gs://$ANSIBLE_BUCKET_NAME
-gsutil mb -p $PROJECT_ID -c STANDARD -l $REGION gs://$TF_STATE_BUCKET
+gsutil mb -p $PROJECT_ID -c STANDARD -l $REGION gs://$GCP_PROJECT_ID-tfstate
 
 # Set appropriate permissions
-gsutil iam ch serviceAccount:$SERVICE_ACCOUNT_EMAIL:objectAdmin gs://$ANSIBLE_BUCKET_NAME
-gsutil iam ch serviceAccount:$SERVICE_ACCOUNT_EMAIL:objectAdmin gs://$TF_STATE_BUCKET
+gsutil iam ch serviceAccount:$SERVICE_ACCOUNT_EMAIL:objectAdmin gs://$GCP_PROJECT_ID-tfstate
 ```
 
 ### 9. Get GitHub Secrets Values
@@ -161,11 +158,8 @@ echo ""
 echo "GCP_PROJECT_ID:"
 echo "$PROJECT_ID"
 echo ""
-echo "ANSIBLE_BUCKET_NAME:"
-echo "$ANSIBLE_BUCKET_NAME"
-
 echo "TF_STATE_BUCKET:"
-echo "$TF_STATE_BUCKET"
+echo "$GCP_PROJECT_ID-tfstate"
 echo "=================================================="
 ```
 
@@ -181,7 +175,6 @@ echo "=================================================="
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full resource name of the Workload Identity Provider |
 | `GCP_SERVICE_ACCOUNT_EMAIL` | Email of the service account created above |
 | `GCP_PROJECT_ID` | Your Google Cloud Project ID |
-| `ANSIBLE_BUCKET_NAME` | Name of the GCS bucket for Ansible artifacts |
 | `TF_STATE_BUCKET` | Name of the GCS bucket for Terraform states |
 
 ## Verification Commands
