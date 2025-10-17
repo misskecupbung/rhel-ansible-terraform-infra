@@ -31,8 +31,6 @@ export POOL_ID="github-actions-pool"
 export PROVIDER_ID="github-actions-provider"
 export SERVICE_ACCOUNT_NAME="github-actions-sa"
 export GITHUB_REPO="misskecupbung/rhel-ansible-terraform-infra"
-export ANSIBLE_BUCKET_NAME="$PROJECT_ID-ansible"  # Replace with unique bucket name
-export TF_STATE_BUCKET="$PROJECT_ID-tfstate"
 export REGION="us-central1"                            # Change to your preferred region
 ```
 
@@ -49,6 +47,8 @@ gcloud services enable cloudresourcemanager.googleapis.com
 gcloud services enable compute.googleapis.com
 gcloud services enable storage.googleapis.com
 gcloud services enable iam.googleapis.com
+gcloud services enable pubsub.googleapis.com
+gcloud services enable cloudbuild.googleapis.com
 ```
 
 **Wait for APIs to be fully enabled (may take a few minutes)**
@@ -93,6 +93,20 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
     --role="roles/compute.securityAdmin"
+
+# Roles for service account and Pub/Sub management
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/iam.serviceAccountAdmin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/pubsub.admin"
+
+# Cloud Build for automation and trigger management
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/cloudbuild.builds.editor"
 ```
 
 ### 5. Create Workload Identity Pool
@@ -134,12 +148,10 @@ gcloud iam service-accounts add-iam-policy-binding $SERVICE_ACCOUNT_EMAIL \
 
 ```bash
 # Create bucket for Ansible artifacts and Terraform state (if needed)
-gsutil mb -p $PROJECT_ID -c STANDARD -l $REGION gs://$ANSIBLE_BUCKET_NAME
-gsutil mb -p $PROJECT_ID -c STANDARD -l $REGION gs://$TF_STATE_BUCKET
+gsutil mb -p $PROJECT_ID -c STANDARD -l $REGION gs://$GCP_PROJECT_ID-tfstate
 
 # Set appropriate permissions
-gsutil iam ch serviceAccount:$SERVICE_ACCOUNT_EMAIL:objectAdmin gs://$ANSIBLE_BUCKET_NAME
-gsutil iam ch serviceAccount:$SERVICE_ACCOUNT_EMAIL:objectAdmin gs://$TF_STATE_BUCKET
+gsutil iam ch serviceAccount:$SERVICE_ACCOUNT_EMAIL:objectAdmin gs://$GCP_PROJECT_ID-tfstate
 ```
 
 ### 9. Get GitHub Secrets Values
@@ -161,11 +173,8 @@ echo ""
 echo "GCP_PROJECT_ID:"
 echo "$PROJECT_ID"
 echo ""
-echo "ANSIBLE_BUCKET_NAME:"
-echo "$ANSIBLE_BUCKET_NAME"
-
 echo "TF_STATE_BUCKET:"
-echo "$TF_STATE_BUCKET"
+echo "$GCP_PROJECT_ID-tfstate"
 echo "=================================================="
 ```
 
@@ -181,7 +190,6 @@ echo "=================================================="
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full resource name of the Workload Identity Provider |
 | `GCP_SERVICE_ACCOUNT_EMAIL` | Email of the service account created above |
 | `GCP_PROJECT_ID` | Your Google Cloud Project ID |
-| `ANSIBLE_BUCKET_NAME` | Name of the GCS bucket for Ansible artifacts |
 | `TF_STATE_BUCKET` | Name of the GCS bucket for Terraform states |
 
 ## Verification Commands
@@ -220,50 +228,3 @@ gsutil iam get gs://$ANSIBLE_BUCKET_NAME
 # List enabled APIs
 gcloud services list --enabled --filter="name:compute OR name:storage OR name:iam"
 ```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **API not enabled**: Ensure all required APIs are enabled and wait for propagation
-2. **Permission denied**: Verify service account has correct IAM roles
-3. **Workload Identity issues**: Check attribute conditions and repository name
-4. **Bucket access**: Ensure bucket name is globally unique and permissions are set
-
-### Useful Commands
-
-```bash
-# Check current project
-gcloud config get-value project
-
-# List service accounts
-gcloud iam service-accounts list
-
-# Check project number
-gcloud projects describe $PROJECT_ID --format="value(projectNumber)"
-
-# Test service account permissions
-gcloud auth list
-```
-
-## Security Considerations
-
-- **Principle of Least Privilege**: Only grant minimum required permissions
-- **Workload Identity**: Never use service account keys in GitHub secrets
-- **Repository Protection**: Ensure branch protection rules are enabled
-- **Secret Management**: Regularly rotate secrets and review access
-
-## Next Steps
-
-After completing these prerequisites:
-
-1. ✅ Push code to the `main` branch to trigger the CI/CD pipeline
-2. ✅ Monitor GitHub Actions workflow execution
-3. ✅ Verify Terraform resources are created in GCP
-4. ✅ Check Ansible playbook execution logs
-
-## Resources
-
-- [Workload Identity Federation Documentation](https://cloud.google.com/iam/docs/workload-identity-federation)
-- [GitHub Actions OIDC Documentation](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect)
-- [Google Cloud IAM Best Practices](https://cloud.google.com/iam/docs/using-iam-securely)

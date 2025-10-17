@@ -9,6 +9,11 @@ data "google_compute_image" "rhel" {
   project = var.rhel_image_project
 }
 
+# Get the Google Cloud Storage service account for this project
+data "google_storage_project_service_account" "gcs_account" {
+  project = var.project_id
+}
+
 resource "google_service_account" "ansible" {
   account_id   = var.service_account_id
   display_name = "Ansible Controller SA"
@@ -41,6 +46,14 @@ resource "google_project_iam_member" "sa_monitoring" {
   member  = "serviceAccount:${google_service_account.ansible.email}"
 }
 
+# Grant Google Cloud Storage service account permission to publish to Pub/Sub
+# This is required for Storage → Pub/Sub notifications
+resource "google_project_iam_member" "gcs_pubsub_publisher" {
+  project = var.project_id
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${data.google_storage_project_service_account.gcs_account.email_address}"
+}
+
 # Storage bucket to hold Ansible content
 resource "google_storage_bucket" "ansible" {
   name                        = var.ansible_bucket_name
@@ -62,22 +75,30 @@ resource "google_storage_notification" "ansible_bucket_notify" {
   topic          = google_pubsub_topic.ansible_updates.id
   payload_format = "JSON_API_V1"
   event_types    = ["OBJECT_FINALIZE", "OBJECT_DELETE"]
+
+  # Ensure IAM permissions are set before creating notification
+  depends_on = [google_project_iam_member.gcs_pubsub_publisher]
 }
 
 # Cloud Build trigger listening to Pub/Sub
 resource "google_cloudbuild_trigger" "ansible_sync" {
-  name        = var.cloud_build_trigger_name
-  description = "Run playbook when Ansible bucket changes"
+  name            = var.cloud_build_trigger_name
+  description     = "Run playbook when Ansible bucket changes"
+  service_account = google_service_account.ansible.id
+
   pubsub_config {
-    topic                 = google_pubsub_topic.ansible_updates.id
-    service_account_email = google_service_account.ansible.email
-    subscription          = null
+    topic = google_pubsub_topic.ansible_updates.id
   }
+
   substitutions = {
     _ANSIBLE_BUCKET = google_storage_bucket.ansible.name
     _ZONE           = var.zone
   }
+
   filename = "cloudbuild.yaml"
+
+  # Ensure dependencies are met
+  depends_on = [google_pubsub_topic.ansible_updates, google_service_account.ansible]
 }
 
 # Firewall rule allowing SSH between controller and managed hosts (simplified)
