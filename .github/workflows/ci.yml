@@ -2,9 +2,9 @@ name: Infrastructure & Configuration Deploy
 
 on:
   push:
-    branches: [ main ]
+    branches: [main, dev, feature/**]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 env:
