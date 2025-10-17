@@ -1,0 +1,14 @@
+[controller]
+controller ansible_host=CONTROLLER_IP ansible_user=root
+
+[web]
+web ansible_host=WEB_IP ansible_user=root
+
+[ntp]
+ntp ansible_host=NTP_IP ansible_user=root
+
+[db]
+db ansible_host=DB_IP ansible_user=root
+
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3

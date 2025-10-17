@@ -1,0 +1,11 @@
+# Managed by Ansible
+log tracking measurements statistics
+logdir /var/log/chrony
+
+{% for srv in chrony_servers %}
+server {{ srv }} iburst
+{% endfor %}
+
+driftfile /var/lib/chrony/drift
+rtcsync
+makestep 1.0 3

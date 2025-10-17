@@ -1,0 +1,14 @@
+---
+- name: Build hostsfile entry list dynamically
+  set_fact:
+    dynamic_hosts_entries: >-
+      {{ groups['all'] | map('extract', hostvars) | list | json_query('[].{ip: ansible_host, name: inventory_hostname}') | list }}
+
+- name: Manage /etc/hosts entries (dynamic)
+  become: yes
+  lineinfile:
+    path: /etc/hosts
+    regexp: "^{{ item.ip }}\\s+{{ item.name }}"
+    line: "{{ item.ip }} {{ item.name }}"
+    state: present
+  loop: "{{ dynamic_hosts_entries | default([]) }}"

@@ -1,0 +1,30 @@
+---
+# Master playbook orchestrating configuration
+
+- name: Common base config (all hosts)
+  hosts: all
+  become: yes
+  roles:
+    - ssh_hardening
+    - hostsfile
+    - firewalld
+    - { role: chrony, when: "'ntp' not in group_names" }
+    - rhel_client
+
+- name: NTP server configuration
+  hosts: ntp
+  become: yes
+  roles:
+    - ntpd
+
+- name: Web server configuration
+  hosts: web
+  become: yes
+  roles:
+    - httpd
+
+- name: Database server configuration
+  hosts: db
+  become: yes
+  roles:
+    - postgresql

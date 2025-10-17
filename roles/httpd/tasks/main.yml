@@ -1,0 +1,20 @@
+---
+- name: Install httpd
+  package:
+    name: httpd
+    state: present
+
+- name: Ensure index page
+  copy:
+    dest: /var/www/html/index.html
+    content: "<html><body><h1>RHEL Web Server</h1></body></html>"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart httpd
+
+- name: Enable and start httpd
+  service:
+    name: httpd
+    state: started
+    enabled: yes

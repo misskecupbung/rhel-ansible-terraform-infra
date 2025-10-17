@@ -1,0 +1,46 @@
+# Cloud Build configuration: triggered when GCS bucket changes via notification -> Pub/Sub -> Build Trigger
+# NOTE: GCS -> Cloud Build direct triggers require a Pub/Sub topic; set that outside this file.
+# This build will:
+# 1. Sync Ansible content from the bucket to a workspace container
+# 2. SSH into controller instance (requires key injection or OS Login) and push updated files
+# 3. Run ansible-playbook remotely
+
+steps:
+  - name: 'gcr.io/cloud-builders/gsutil'
+    id: 'Sync from bucket'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gsutil -m rsync -r gs://$ANSIBLE_BUCKET ./ansible
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'Fetch controller IP'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        export CONTROLLER_IP=$(gcloud compute instances describe controller --zone $ZONE --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+        echo "CONTROLLER_IP=$CONTROLLER_IP" >> $BUILDER_OUTPUT
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'Push files + run playbook'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        source $BUILDER_OUTPUT
+        # Assumes OS Login or pre-distributed SSH key; adapt as needed.
+        tar czf ansible.tar.gz ansible
+        gcloud compute scp ansible.tar.gz controller:/tmp/ansible.tar.gz --zone $ZONE
+  gcloud compute ssh controller --zone $ZONE --command "sudo mkdir -p /opt/ansible && sudo tar xzf /tmp/ansible.tar.gz -C /opt/ansible --strip-components=1 && cd /opt/ansible && sudo ansible-galaxy collection install -r requirements.yml || true && sudo ansible-playbook -i inventory/gcp_compute.yaml playbooks/site.yml"
+
+substitutions:
+  # _ANSIBLE_BUCKET provided by trigger
+  _ZONE: us-central1-a
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+# artifacts:
+#   objects:
+#     location: gs://$ANSIBLE_BUCKET-build-artifacts
+#     paths: ['ansible/**']

@@ -1,0 +1,15 @@
+---
+# Global vars
+chrony_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+  - 2.pool.ntp.org
+  - 3.pool.ntp.org
+firewalld_services_common:
+  - ssh
+
+# /etc/hosts entries to ensure name resolution between instances
+firewalld_ports_common:
+  - 80/tcp
+  - 5432/tcp
+  - 123/udp

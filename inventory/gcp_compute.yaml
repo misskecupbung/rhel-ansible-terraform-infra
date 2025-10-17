@@ -1,0 +1,14 @@
+plugin: google.cloud.gcp_compute
+projects:
+  - YOUR_PROJECT_ID   # replace or set via env ANSIBLE_GCP_PROJECT
+zones:
+  - us-central1-a     # replace or set via env ANSIBLE_GCP_ZONE
+filters: []
+hostnames: name
+compose:
+  ansible_host: networkInterfaces[0].accessConfigs[0].natIP
+keyed_groups:
+  - key: labels
+    prefix: label
+  - key: tags.items
+    prefix: tag

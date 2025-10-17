@@ -1,0 +1,106 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  TF_IN_AUTOMATION: true
+
+jobs:
+  validate:
+    name: Validate (Lint & Terraform)
+    runs-on: ubuntu-latest
+    outputs:
+      tf_plan_exitcode: ${{ steps.plan_out.outputs.exitcode }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          ansible-galaxy collection install -r requirements.yml || true
+
+      - name: Ansible Lint
+        run: ansible-lint || echo "Lint warnings"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.7.5
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        working-directory: terraform
+        run: terraform validate
+
+      - name: Terraform Format Check
+        working-directory: terraform
+        run: terraform fmt -check || (echo "Terraform formatting issues" && exit 1)
+
+      - name: Terraform Plan (no auth)
+        id: plan_out
+        working-directory: terraform
+        run: |
+          terraform plan -input=false || echo "Plan requires provider auth (expected in deploy job)."
+          echo "exitcode=0" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy (Terraform Apply)
+    needs: validate
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.7.5
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Configure gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init -input=false
+
+      - name: Terraform Plan (auth)
+        working-directory: terraform
+        run: terraform plan -input=false -var "project_id=${{ secrets.GCP_PROJECT_ID }}" -var "ansible_bucket_name=${{ secrets.ANSIBLE_BUCKET_NAME }}"
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve -input=false -var "project_id=${{ secrets.GCP_PROJECT_ID }}" -var "ansible_bucket_name=${{ secrets.ANSIBLE_BUCKET_NAME }}"
+
+      - name: Terraform Output
+        working-directory: terraform
+        run: terraform output -json > tf-output.json
+
+      - name: Upload Outputs Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: terraform/tf-output.json

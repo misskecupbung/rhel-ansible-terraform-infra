@@ -1,0 +1,27 @@
+---
+- name: Ensure openssh server installed
+  package:
+    name: openssh-server
+    state: present
+
+- name: Harden sshd_config
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^{{ item.key }}'
+    line: '{{ item.key }} {{ item.value }}'
+    state: present
+  loop:
+    - { key: 'Protocol', value: '2' }
+    - { key: 'PermitRootLogin', value: 'no' }
+    - { key: 'PasswordAuthentication', value: 'no' }
+    - { key: 'ClientAliveInterval', value: '300' }
+    - { key: 'ClientAliveCountMax', value: '0' }
+    - { key: 'X11Forwarding', value: 'no' }
+  notify: Restart sshd
+
+- name: Ensure secure permissions on sshd_config
+  file:
+    path: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: '0600'

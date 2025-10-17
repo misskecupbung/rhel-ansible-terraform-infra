@@ -1,0 +1,20 @@
+---
+- name: Install chrony
+  package:
+    name: chrony
+    state: present
+
+- name: Configure chrony servers
+  template:
+    src: chrony.conf.j2
+    dest: /etc/chrony.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart chronyd
+
+- name: Ensure chronyd running
+  service:
+    name: chronyd
+    state: started
+    enabled: yes

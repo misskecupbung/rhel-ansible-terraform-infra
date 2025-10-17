@@ -1,0 +1,28 @@
+---
+- name: Ensure firewalld installed
+  package:
+    name: firewalld
+    state: present
+
+- name: Enable and start firewalld
+  service:
+    name: firewalld
+    state: started
+    enabled: yes
+
+- name: Open common firewall services
+  firewalld:
+    service: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop: "{{ firewalld_services_common | default([]) }}"
+
+- name: Open common firewall ports
+  firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop: "{{ firewalld_ports_common | default([]) }}"
+
