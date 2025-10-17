@@ -25,4 +25,3 @@
     state: enabled
     immediate: true
   loop: "{{ firewalld_ports_common | default([]) }}"
-
