@@ -25,13 +25,14 @@ First, set up your environment variables. Replace the placeholder values with yo
 
 ```bash
 # Set your project variables
-export PROJECT_ID="your-project-id"                    # Replace with your GCP project ID
+export PROJECT_ID="stellar-polymer-475409-a8"                    # Replace with your GCP project ID
 export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
 export POOL_ID="github-actions-pool"
 export PROVIDER_ID="github-actions-provider"
 export SERVICE_ACCOUNT_NAME="github-actions-sa"
 export GITHUB_REPO="misskecupbung/rhel-ansible-terraform-infra"
-export ANSIBLE_BUCKET_NAME="your-ansible-bucket-name"  # Replace with unique bucket name
+export ANSIBLE_BUCKET_NAME="$PROJECT_ID-ansible"  # Replace with unique bucket name
+export TF_STATE_BUCKET="$PROJECT_ID-tfstate"
 export REGION="us-central1"                            # Change to your preferred region
 ```
 
@@ -134,9 +135,11 @@ gcloud iam service-accounts add-iam-policy-binding $SERVICE_ACCOUNT_EMAIL \
 ```bash
 # Create bucket for Ansible artifacts and Terraform state (if needed)
 gsutil mb -p $PROJECT_ID -c STANDARD -l $REGION gs://$ANSIBLE_BUCKET_NAME
+gsutil mb -p $PROJECT_ID -c STANDARD -l $REGION gs://$TF_STATE_BUCKET
 
 # Set appropriate permissions
 gsutil iam ch serviceAccount:$SERVICE_ACCOUNT_EMAIL:objectAdmin gs://$ANSIBLE_BUCKET_NAME
+gsutil iam ch serviceAccount:$SERVICE_ACCOUNT_EMAIL:objectAdmin gs://$TF_STATE_BUCKET
 ```
 
 ### 9. Get GitHub Secrets Values
@@ -160,6 +163,9 @@ echo "$PROJECT_ID"
 echo ""
 echo "ANSIBLE_BUCKET_NAME:"
 echo "$ANSIBLE_BUCKET_NAME"
+
+echo "TF_STATE_BUCKET:"
+echo "$TF_STATE_BUCKET"
 echo "=================================================="
 ```
 
@@ -176,6 +182,7 @@ echo "=================================================="
 | `GCP_SERVICE_ACCOUNT_EMAIL` | Email of the service account created above |
 | `GCP_PROJECT_ID` | Your Google Cloud Project ID |
 | `ANSIBLE_BUCKET_NAME` | Name of the GCS bucket for Ansible artifacts |
+| `TF_STATE_BUCKET` | Name of the GCS bucket for Terraform states |
 
 ## Verification Commands
 

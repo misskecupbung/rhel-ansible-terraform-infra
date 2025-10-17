@@ -12,7 +12,7 @@ pip3 install --upgrade pip
 pip3 install ansible>=2.19
 
 # Variables (will be substituted via Terraform templatefile if needed)
-BUCKET_NAME="${BUCKET_NAME:-}" # set by metadata or terraform
+BUCKET_NAME="${BUCKET_NAME}" # set by terraform templatefile
 ANSIBLE_DIR=/opt/ansible
 mkdir -p "$ANSIBLE_DIR"
 cd "$ANSIBLE_DIR"

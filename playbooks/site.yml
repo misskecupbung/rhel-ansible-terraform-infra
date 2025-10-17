@@ -3,7 +3,7 @@
 
 - name: Common base config (all hosts)
   hosts: all
-  become: yes
+  become: true
   roles:
     - ssh_hardening
     - hostsfile
@@ -13,18 +13,18 @@
 
 - name: NTP server configuration
   hosts: ntp
-  become: yes
+  become: true
   roles:
     - ntpd
 
 - name: Web server configuration
   hosts: web
-  become: yes
+  become: true
   roles:
     - httpd
 
 - name: Database server configuration
   hosts: db
-  become: yes
+  become: true
   roles:
     - postgresql

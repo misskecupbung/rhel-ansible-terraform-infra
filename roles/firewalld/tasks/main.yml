@@ -1,28 +1,27 @@
 ---
 - name: Ensure firewalld installed
-  package:
+  ansible.builtin.package:
     name: firewalld
     state: present
 
 - name: Enable and start firewalld
-  service:
+  ansible.builtin.service:
     name: firewalld
     state: started
-    enabled: yes
+    enabled: true
 
 - name: Open common firewall services
-  firewalld:
+  ansible.posix.firewalld:
     service: "{{ item }}"
-    permanent: yes
+    permanent: true
     state: enabled
-    immediate: yes
+    immediate: true
   loop: "{{ firewalld_services_common | default([]) }}"
 
 - name: Open common firewall ports
-  firewalld:
+  ansible.posix.firewalld:
     port: "{{ item }}"
-    permanent: yes
+    permanent: true
     state: enabled
-    immediate: yes
+    immediate: true
   loop: "{{ firewalld_ports_common | default([]) }}"
-
