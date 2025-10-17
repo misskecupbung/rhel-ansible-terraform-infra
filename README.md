@@ -209,9 +209,8 @@ rhel-ansible-terraform-infra/
     ├── config/                  # Configuration files
     │   ├── backend.hcl          # GCS backend configuration
     │   └── terraform.tfvars     # Variable values
-    ├── versions.tf              # Version constraints
-    ├── provider.tf              # Provider configuration  
-    ├── variables.tf             # Input variables with validation
+    ├── provider.tf              # Provider & version configuration  
+    ├── variables.tf             # Variable definitions
     ├── locals.tf                # Local values and configurations
     ├── main.tf                  # Core resources and data sources
     ├── outputs.tf               # Output values and useful commands

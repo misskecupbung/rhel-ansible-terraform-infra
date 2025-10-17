@@ -73,7 +73,7 @@ variable "rhel_image" {
   type        = string
   default     = "family/rhel-10"
   validation {
-    condition = can(regex("^(family/rhel-[0-9]+|rhel-[0-9]+-v[0-9]+|projects/.*/global/images/.*)$", var.rhel_image))
+    condition     = can(regex("^(family/rhel-[0-9]+|rhel-[0-9]+-v[0-9]+|projects/.*/global/images/.*)$", var.rhel_image))
     error_message = "RHEL image must be a family (family/rhel-10), specific image (rhel-10-v20250101), or full image path."
   }
 }

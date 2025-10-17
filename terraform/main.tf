@@ -9,20 +9,6 @@ data "google_compute_image" "rhel" {
   project = var.rhel_image_project
 }
 
-# =============================================================================
-# LOCAL VALUES
-# =============================================================================
-
-locals {
-  labels = {
-    environment = "lab"
-    managed_by  = "terraform"
-  }
-  
-  # Use the resolved image from data source
-  rhel_image_url = data.google_compute_image.rhel.self_link
-}
-
 resource "google_service_account" "ansible" {
   account_id   = var.service_account_id
   display_name = "Ansible Controller SA"
@@ -142,15 +128,6 @@ resource "google_compute_firewall" "ntp" {
   target_tags   = ["ntp"]
 }
 
-# Instance template data common
-locals {
-  instances = {
-    controller = { machine_type = var.machine_type }
-    web        = { machine_type = var.machine_type }
-    ntp        = { machine_type = var.machine_type }
-    db         = { machine_type = var.machine_type }
-  }
-}
 
 # Create VMs
 resource "google_compute_instance" "controller" {
@@ -247,7 +224,3 @@ resource "google_compute_instance" "db" {
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
 }
-
-output "controller_public_ip" { value = google_compute_instance.controller.network_interface[0].access_config[0].nat_ip }
-output "bucket_name" { value = google_storage_bucket.ansible.name }
-output "service_account_email" { value = google_service_account.ansible.email }
