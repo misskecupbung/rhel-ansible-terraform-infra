@@ -1,8 +1,26 @@
+# =============================================================================
+# DATA SOURCES
+# =============================================================================
+
+# Get the latest RHEL image
+data "google_compute_image" "rhel" {
+  family  = startswith(var.rhel_image, "family/") ? replace(var.rhel_image, "family/", "") : null
+  name    = startswith(var.rhel_image, "family/") ? null : var.rhel_image
+  project = var.rhel_image_project
+}
+
+# =============================================================================
+# LOCAL VALUES
+# =============================================================================
+
 locals {
   labels = {
     environment = "lab"
     managed_by  = "terraform"
   }
+  
+  # Use the resolved image from data source
+  rhel_image_url = data.google_compute_image.rhel.self_link
 }
 
 resource "google_service_account" "ansible" {
@@ -39,11 +57,11 @@ resource "google_project_iam_member" "sa_monitoring" {
 
 # Storage bucket to hold Ansible content
 resource "google_storage_bucket" "ansible" {
-  name          = var.ansible_bucket_name
-  location      = var.region
-  force_destroy = true
+  name                        = var.ansible_bucket_name
+  location                    = var.region
+  force_destroy               = true
   uniform_bucket_level_access = true
-  labels = local.labels
+  labels                      = local.labels
 }
 
 # Pub/Sub topic for bucket notifications -> Cloud Build trigger
@@ -65,9 +83,9 @@ resource "google_cloudbuild_trigger" "ansible_sync" {
   name        = var.cloud_build_trigger_name
   description = "Run playbook when Ansible bucket changes"
   pubsub_config {
-    topic    = google_pubsub_topic.ansible_updates.id
+    topic                 = google_pubsub_topic.ansible_updates.id
     service_account_email = google_service_account.ansible.email
-    subscription = null
+    subscription          = null
   }
   substitutions = {
     _ANSIBLE_BUCKET = google_storage_bucket.ansible.name
@@ -137,18 +155,18 @@ locals {
 # Create VMs
 resource "google_compute_instance" "controller" {
   name         = "controller"
-  machine_type = local.instances.controller.machine_type
+  machine_type = var.machine_type
   zone         = var.zone
   tags         = concat(var.tags, ["controller"])
   labels       = local.labels
   boot_disk {
     initialize_params {
-      image = var.rhel_image
+      image = local.rhel_image_url
       size  = 30
     }
   }
   metadata = {
-    BUCKET_NAME = var.ansible_bucket_name
+    BUCKET_NAME    = var.ansible_bucket_name
     startup-script = file("${path.module}/startup-controller.sh")
   }
   network_interface {
@@ -170,7 +188,7 @@ resource "google_compute_instance" "web" {
   labels       = local.labels
   boot_disk {
     initialize_params {
-      image = var.rhel_image
+      image = local.rhel_image_url
       size  = 30
     }
   }
@@ -193,7 +211,7 @@ resource "google_compute_instance" "ntp" {
   labels       = local.labels
   boot_disk {
     initialize_params {
-      image = var.rhel_image
+      image = local.rhel_image_url
       size  = 30
     }
   }
@@ -216,7 +234,7 @@ resource "google_compute_instance" "db" {
   labels       = local.labels
   boot_disk {
     initialize_params {
-      image = var.rhel_image
+      image = local.rhel_image_url
       size  = 50
     }
   }

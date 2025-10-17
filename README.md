@@ -1,6 +1,146 @@
-# RHEL Infrastructure Automation with Terraform & Ansible
+# RHEL Ansible Terraform Infrastructure
 
-A complete infrastructure-as-code solution that combines **Terraform** for Google Cloud Platform provisioning and **Ansible** for RHEL configuration management. This repository includes automated CI/CD pipelines with GitHub Actions for seamless deployment and management.
+Modern Infrastructure as Code solution for deploying and configuring RHEL instances on Google Cloud Platform.
+
+## Overview
+
+- **Terraform**: Infrastructure provisioning on GCP
+- **Ansible**: Configuration management and application deployment  
+- **GitHub Actions**: Automated CI/CD pipeline
+- **RHEL 10**: Latest Red Hat Enterprise Linux
+
+## Project Structure
+
+```
+rhel-ansible-terraform-infra/
+├── terraform/
+│   ├── config/
+│   │   ├── backend.hcl          # GCS backend configuration
+│   │   └── terraform.tfvars     # Variable values
+│   ├── main.tf                  # Infrastructure definitions
+│   ├── variables.tf             # Variable definitions
+│   ├── outputs.tf               # Output definitions
+│   ├── provider.tf              # Provider configuration
+│   └── Makefile                 # Convenient commands
+├── .github/workflows/ci.yml     # CI/CD pipeline
+├── playbooks/                   # Ansible playbooks
+├── roles/                       # Ansible roles for RHEL configuration
+└── inventory/                   # Ansible inventory
+```
+
+## Quick Start
+
+### 1. Prerequisites
+- Google Cloud Project with billing enabled
+- Terraform >= 1.6.0
+- Python 3.13+ with Ansible 2.19+
+
+See [PREREQUISITES.md](PREREQUISITES.md) for detailed setup.
+
+### 2. Configuration
+
+Update configuration files:
+
+**terraform/config/backend.hcl:**
+```hcl
+bucket = "your-project-terraform-state"
+prefix = "terraform/state"
+```
+
+**terraform/config/terraform.tfvars:**
+```hcl
+project_id = "your-gcp-project"
+region     = "us-central1"
+zone       = "us-central1-a"
+# ... other variables
+```
+
+### 3. Deploy Infrastructure
+
+```bash
+cd terraform
+
+# Initialize and deploy
+make init
+make plan
+make apply
+
+# Show outputs
+make output
+```
+
+### 4. Configure Systems with Ansible
+
+```bash
+# Run all configurations
+ansible-playbook -i inventory/gcp_compute.yaml playbooks/site.yml
+
+# Run specific roles
+ansible-playbook -i inventory/gcp_compute.yaml playbooks/site.yml --tags "chrony,firewalld"
+```
+
+## Available Make Commands
+
+```bash
+make init          # Initialize Terraform
+make plan          # Preview changes
+make apply         # Apply changes (with confirmation)
+make destroy       # Destroy infrastructure (with confirmation)
+make output        # Show outputs
+make validate      # Validate configuration
+make fmt           # Format files
+make clean         # Clean temporary files
+make help          # Show all commands
+```
+
+## CI/CD Pipeline
+
+The GitHub Actions workflow automatically:
+1. Validates Terraform and Ansible code
+2. Plans infrastructure changes
+3. Deploys infrastructure (on main branch)
+4. Deploys Ansible configurations via Cloud Build
+
+## GitHub Secrets Required
+
+- `GCP_PROJECT_ID`: Your Google Cloud Project ID
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`: Workload Identity Provider
+- `GCP_SERVICE_ACCOUNT_EMAIL`: Service Account email
+- `ANSIBLE_BUCKET_NAME`: GCS bucket for Ansible configurations
+
+## Ansible Roles
+
+- **chrony**: Time synchronization
+- **firewalld**: Firewall configuration  
+- **hostsfile**: /etc/hosts management
+- **httpd**: Apache web server
+- **ntpd**: NTP server
+- **postgresql**: Database server
+- **rhel_client**: Base RHEL configuration
+- **ssh_hardening**: SSH security
+
+## License
+
+This project is open source and available under the [MIT License](LICENSE).
+
+## 📋 Prerequisites
+
+### Required Tools
+- **Python 3.13+** with pip
+- **Ansible 2.19+** 
+- **Terraform 1.7.5+**
+- **Google Cloud SDK (gcloud)**
+- **Git**
+- **Make** (for convenient commands)
+
+### GCP Requirements
+- Active Google Cloud Project with billing enabled
+- Service Account with appropriate permissions
+- Workload Identity Federation configured
+- Required APIs enabled
+- Separate GCS buckets for each environment
+
+**📖 See [PREREQUISITES.md](PREREQUISITES.md) for detailed setup instructions**
 
 ## 🏗️ Architecture Overview
 
@@ -41,8 +181,9 @@ This project provides:
 
 ```
 rhel-ansible-terraform-infra/
-├── README.md
-├── PREREQUISITES.md              # Complete setup guide
+├── README.md                    # Project overview and usage guide
+├── DESIGN.md                    # Detailed architecture and flow documentation
+├── PREREQUISITES.md             # Complete setup guide
 ├── requirements.txt             # Python dependencies
 ├── requirements.yml             # Ansible collections
 ├── cloudbuild.yaml              # Google Cloud Build configuration
@@ -65,10 +206,16 @@ rhel-ansible-terraform-infra/
 │   ├── rhel_client/             # Base RHEL configuration
 │   └── ssh_hardening/           # SSH security hardening
 └── terraform/                   # Infrastructure as Code
-    ├── main.tf                  # Core resources
-    ├── variables.tf             # Input variables
-    ├── outputs.tf               # Output values
-    ├── provider.tf              # Provider configuration
+    ├── config/                  # Configuration files
+    │   ├── backend.hcl          # GCS backend configuration
+    │   └── terraform.tfvars     # Variable values
+    ├── versions.tf              # Version constraints
+    ├── provider.tf              # Provider configuration  
+    ├── variables.tf             # Input variables with validation
+    ├── locals.tf                # Local values and configurations
+    ├── main.tf                  # Core resources and data sources
+    ├── outputs.tf               # Output values and useful commands
+    ├── Makefile                 # Convenient commands
     └── startup-controller.sh    # VM bootstrap script
 ```
 
@@ -139,6 +286,37 @@ The prerequisites include:
 - **Better cloud integration** with improved GCP, AWS, and Azure modules
 - **RHEL 10 support** with latest system modules and package management
 
+## 🔧 Configuration
+
+### Terraform Configuration Files
+
+The project uses a simplified single-environment structure:
+
+#### Backend Configuration (`terraform/config/backend.hcl`)
+```hcl
+bucket = "your-terraform-state-bucket"
+prefix = "terraform/state"
+```
+
+#### Variable Values (`terraform/config/terraform.tfvars`)  
+```hcl
+project_id              = "your-gcp-project"
+machine_type            = "e2-medium"
+region                  = "us-central1"
+zone                    = "us-central1-a" 
+ansible_bucket_name     = "your-ansible-configs"
+terraform_state_bucket  = "your-terraform-state"
+# ... other configuration values
+```
+
+### GitHub Secrets Configuration
+
+#### Required Secrets
+- `GCP_PROJECT_ID`: Your Google Cloud Project ID
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`: Workload Identity Provider name  
+- `GCP_SERVICE_ACCOUNT_EMAIL`: Service Account email
+- `ANSIBLE_BUCKET_NAME`: GCS bucket for Ansible configurations
+
 ## 🏗️ Infrastructure Deployment
 
 ### 1. Deploy Infrastructure with Terraform
@@ -195,31 +373,101 @@ ansible-playbook -i inventory/gcp_compute.yaml playbooks/site.yml --limit web_se
 | `hostsfile` | Host resolution | Dynamic `/etc/hosts` management |
 | `ssh_hardening` | Security hardening | SSH configuration, key-based auth only |
 
-## 🚀 CI/CD Pipeline
+## 🚀 CI/CD Pipeline Flow
 
-The project includes automated GitHub Actions workflows:
+The project implements a comprehensive 4-stage deployment pipeline:
 
-### Validation Pipeline (`.github/workflows/ci.yml`)
-- **Ansible Lint**: Code quality and best practices
-- **Terraform Validation**: Configuration syntax and formatting
-- **Security Checks**: Basic validation of Terraform plans
+### 📋 Stage 1: Repository Validation
+**Runs on**: Every PR and push  
+**Purpose**: Validate code quality and syntax
+- **🔧 Ansible Lint**: Playbook and role best practices validation
+- **✅ Terraform Validate**: Configuration syntax verification  
+- **📐 Terraform Format**: Code formatting standards check
+- **🐍 Python Dependencies**: Requirements and collections validation
 
-### Deployment Pipeline
-- **Automatic Deployment**: Triggered on push to `main` branch
-- **Workload Identity**: Secure authentication without storing keys
-- **Terraform Apply**: Infrastructure changes deployed automatically
-- **Artifact Storage**: Terraform outputs stored for reference
+### 🗺️ Stage 2: Terraform Plan  
+**Runs on**: Every PR and push  
+**Purpose**: Preview infrastructure changes
+- **🔄 Backend Initialization**: Configure GCS state storage
+- **📋 Plan Generation**: Create detailed execution plan
+- **💾 Plan Artifact**: Save plan for review and apply stage
+- **🔍 Change Analysis**: Compare current vs desired state
 
-### Manual Usage
-```bash
-# Run linting locally
-ansible-lint
+### 🚀 Stage 3: Terraform Apply
+**Runs on**: `main` branch only (with approval)  
+**Purpose**: Deploy infrastructure changes  
+**Environment**: Production (requires manual approval)
+- **🏗️ Infrastructure Deployment**: Apply Terraform configuration
+- **📊 Output Collection**: Gather deployment information
+- **💾 State Management**: Update remote state in GCS
+- **✅ Validation**: Verify successful deployment
 
-# Terraform validation
-cd terraform
-terraform fmt -check
-terraform validate
+### 📦 Stage 4: Ansible Configuration Deployment
+**Runs on**: `main` branch only (after Terraform)  
+**Purpose**: Deploy Ansible configurations to trigger Cloud Build
+- **📦 Archive Creation**: Package Ansible configurations
+- **☁️ GCS Upload**: Deploy configs to trigger bucket
+- **🔄 Cloud Build Trigger**: Automatic configuration management
+- **📊 Status Reporting**: Deployment summary and next steps
+
+## 🔄 Automated Flow Diagram
+
+```mermaid
+graph TD
+    A[Code Push/PR] --> B[📋 Validate Repository]
+    B --> C[🗺️ Terraform Plan]
+    C --> D{Branch Check}
+    D -->|PR Branch| E[📊 Plan Review]
+    D -->|Main Branch| F[🚀 Terraform Apply]
+    F --> G[📦 Deploy Ansible Configs]
+    G --> H[☁️ Upload to GCS]
+    H --> I[🔄 Cloud Build Triggers]
+    I --> J[🤖 Ansible Controller Runs]
+    J --> K[✅ Infrastructure Configured]
 ```
+
+## 🛡️ Security & Approval Gates
+
+### 🔒 Security Features
+- **Workload Identity Federation**: No long-lived keys stored
+- **Environment Protection**: Production requires manual approval
+- **State Encryption**: Remote state stored securely in GCS
+- **Audit Trail**: All deployments logged and tracked
+
+### ✋ Approval Gates
+1. **Code Review**: All changes require PR review
+2. **Validation Gates**: Must pass all lint and validation checks
+3. **Production Approval**: Manual approval required for `main` deployments
+4. **Rollback Capability**: Previous state versions available for rollback
+
+## 📊 Monitoring & Troubleshooting
+
+### 🔍 Useful Commands
+```bash
+# Check deployment status
+gcloud builds list --limit=5
+
+# View Terraform outputs
+cd terraform && terraform output
+
+# Monitor Cloud Build logs
+gcloud builds log $(gcloud builds list --limit=1 --format="value(id)")
+
+# SSH to controller for debugging
+gcloud compute ssh controller --zone=us-central1-a
+
+# Check Ansible controller logs
+gcloud compute ssh controller --command='sudo journalctl -u google-startup-scripts.service -f'
+
+# Manual Ansible run on controller
+gcloud compute ssh controller --command='cd /opt/ansible && sudo ansible-playbook -i inventory/gcp_compute.yaml playbooks/site.yml'
+```
+
+### 🚨 Troubleshooting Common Issues
+- **Plan Failures**: Check GitHub secrets and GCP permissions
+- **Apply Failures**: Verify resource quotas and IAM roles
+- **Cloud Build Issues**: Check bucket permissions and trigger configuration
+- **Ansible Failures**: Review controller startup logs and SSH connectivity
 
 ## ⚙️ Configuration Management
 

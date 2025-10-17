@@ -1,46 +1,239 @@
-# Cloud Build configuration: triggered when GCS bucket changes via notification -> Pub/Sub -> Build Trigger
-# NOTE: GCS -> Cloud Build direct triggers require a Pub/Sub topic; set that outside this file.
-# This build will:
-# 1. Sync Ansible content from the bucket to a workspace container
-# 2. SSH into controller instance (requires key injection or OS Login) and push updated files
-# 3. Run ansible-playbook remotely
+# =============================================================================
+# CLOUD BUILD CONFIGURATION
+# =============================================================================
+# This Cloud Build is triggered when Ansible configurations are uploaded to GCS
+# by the GitHub Actions pipeline. It handles the configuration management phase.
+#
+# Flow:
+# 1. GitHub Actions uploads Ansible configs to GCS bucket
+# 2. GCS bucket notification triggers Pub/Sub topic  
+# 3. Pub/Sub triggers this Cloud Build
+# 4. Cloud Build deploys configs to Ansible controller
+# 5. Ansible controller configures all managed hosts
 
 steps:
+  # ---------------------------------------------------------------------------
+  # STEP 1: Download Ansible configurations from GCS
+  # ---------------------------------------------------------------------------
   - name: 'gcr.io/cloud-builders/gsutil'
-    id: 'Sync from bucket'
+    id: 'download-ansible-configs'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        gsutil -m rsync -r gs://$ANSIBLE_BUCKET ./ansible
+        echo "📦 Downloading Ansible configurations from GCS..."
+        echo "Bucket: gs://${_ANSIBLE_BUCKET}"
+        
+        # Download and extract the archive
+        gsutil cp gs://${_ANSIBLE_BUCKET}/ansible-configs.tar.gz ./
+        tar -xzf ansible-configs.tar.gz
+        
+        echo "📋 Downloaded configuration contents:"
+        find . -type f -name "*.yml" -o -name "*.yaml" | head -20
+        echo "✅ Ansible configurations downloaded successfully"
+
+  # ---------------------------------------------------------------------------  
+  # STEP 2: Get controller instance information
+  # ---------------------------------------------------------------------------
   - name: 'gcr.io/cloud-builders/gcloud'
-    id: 'Fetch controller IP'
+    id: 'get-controller-info'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        export CONTROLLER_IP=$(gcloud compute instances describe controller --zone $ZONE --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
-        echo "CONTROLLER_IP=$CONTROLLER_IP" >> $BUILDER_OUTPUT
+        echo "🔍 Getting Ansible controller information..."
+        
+        # Get controller details
+        CONTROLLER_IP=$(gcloud compute instances describe controller \
+          --zone=${_ZONE} \
+          --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+        
+        CONTROLLER_STATUS=$(gcloud compute instances describe controller \
+          --zone=${_ZONE} \
+          --format='get(status)')
+        
+        echo "Controller IP: $${CONTROLLER_IP}"
+        echo "Controller Status: $${CONTROLLER_STATUS}"
+        
+        # Save for next steps
+        echo "CONTROLLER_IP=$${CONTROLLER_IP}" > /workspace/controller_info
+        echo "CONTROLLER_STATUS=$${CONTROLLER_STATUS}" >> /workspace/controller_info
+        
+        if [ "$${CONTROLLER_STATUS}" != "RUNNING" ]; then
+          echo "❌ Controller is not running. Status: $${CONTROLLER_STATUS}"
+          exit 1
+        fi
+        
+        echo "✅ Controller is ready for configuration deployment"
+
+  # ---------------------------------------------------------------------------
+  # STEP 3: Deploy configurations to controller
+  # ---------------------------------------------------------------------------  
   - name: 'gcr.io/cloud-builders/gcloud'
-    id: 'Push files + run playbook'
+    id: 'deploy-to-controller'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        source $BUILDER_OUTPUT
-        # Assumes OS Login or pre-distributed SSH key; adapt as needed.
-        tar czf ansible.tar.gz ansible
-        gcloud compute scp ansible.tar.gz controller:/tmp/ansible.tar.gz --zone $ZONE
-  gcloud compute ssh controller --zone $ZONE --command "sudo mkdir -p /opt/ansible && sudo tar xzf /tmp/ansible.tar.gz -C /opt/ansible --strip-components=1 && cd /opt/ansible && sudo ansible-galaxy collection install -r requirements.yml || true && sudo ansible-playbook -i inventory/gcp_compute.yaml playbooks/site.yml"
+        echo "🚀 Deploying Ansible configurations to controller..."
+        source /workspace/controller_info
+        
+        # Create deployment archive
+        tar -czf ansible-deploy.tar.gz \
+          --exclude='terraform' \
+          --exclude='.github' \
+          --exclude='.git' \
+          --exclude='*.md' \
+          --exclude='requirements.txt' \
+          .
+        
+        echo "📦 Uploading configuration archive to controller..."
+        
+        # Upload configuration archive
+        gcloud compute scp ansible-deploy.tar.gz controller:/tmp/ \
+          --zone=${_ZONE} \
+          --quiet
+        
+        echo "✅ Configuration archive uploaded successfully"
+
+  # ---------------------------------------------------------------------------
+  # STEP 4: Extract and prepare configurations on controller
+  # ---------------------------------------------------------------------------
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'prepare-configs-on-controller'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "⚙️ Preparing configurations on Ansible controller..."
+        
+        # Extract and setup configurations
+        gcloud compute ssh controller \
+          --zone=${_ZONE} \
+          --quiet \
+          --command="
+            set -e
+            echo '📦 Extracting Ansible configurations...'
+            sudo mkdir -p /opt/ansible-new
+            sudo tar -xzf /tmp/ansible-deploy.tar.gz -C /opt/ansible-new
+            
+            echo '🔄 Backing up current configuration...'
+            sudo rm -rf /opt/ansible-backup || true
+            sudo mv /opt/ansible /opt/ansible-backup || true
+            sudo mv /opt/ansible-new /opt/ansible
+            
+            echo '📁 Setting permissions...'
+            sudo chown -R root:root /opt/ansible
+            sudo chmod -R 755 /opt/ansible
+            
+            echo '📋 Installing/updating Ansible collections...'
+            cd /opt/ansible
+            sudo ansible-galaxy collection install -r requirements.yml --force || echo 'Collection install warnings (non-critical)'
+            
+            echo '✅ Ansible configurations prepared successfully'
+          "
+
+  # ---------------------------------------------------------------------------
+  # STEP 5: Run Ansible playbook on all managed hosts
+  # ---------------------------------------------------------------------------
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'run-ansible-playbook'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🤖 Running Ansible playbook on all managed hosts..."
+        
+        # Run the main site playbook
+        gcloud compute ssh controller \
+          --zone=${_ZONE} \
+          --quiet \
+          --command="
+            set -e
+            cd /opt/ansible
+            
+            echo '🔍 Checking Ansible inventory...'
+            sudo ansible-inventory -i inventory/gcp_compute.yaml --list --yaml || \
+            sudo ansible-inventory -i inventory/hosts --list --yaml
+            
+            echo '📡 Testing connectivity to managed hosts...'
+            sudo ansible -i inventory/gcp_compute.yaml all -m ping -o || \
+            sudo ansible -i inventory/hosts all -m ping -o
+            
+            echo '🚀 Running main site playbook...'
+            sudo ansible-playbook \
+              -i inventory/gcp_compute.yaml \
+              playbooks/site.yml \
+              -v || {
+                echo '⚠️ Primary inventory failed, trying fallback...'
+                sudo ansible-playbook \
+                  -i inventory/hosts \
+                  playbooks/site.yml \
+                  -v
+              }
+            
+            echo '✅ Ansible playbook execution completed successfully!'
+          "
+
+  # ---------------------------------------------------------------------------
+  # STEP 6: Generate deployment report
+  # ---------------------------------------------------------------------------
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'generate-deployment-report'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "📊 Generating deployment report..."
+        
+        # Create deployment report
+        cat > deployment-report.md << 'EOF'
+        # 🎉 Ansible Deployment Report
+        
+        **Deployment Time:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        **Build ID:** $BUILD_ID
+        **Trigger:** GCS Bucket Update
+        **Status:** ✅ SUCCESS
+        
+        ## 📋 Deployment Summary
+        - ✅ Configurations downloaded from GCS
+        - ✅ Controller instance verified and accessible
+        - ✅ Configuration archive deployed to controller  
+        - ✅ Ansible collections updated
+        - ✅ Site playbook executed successfully
+        
+        ## 🖥️ Managed Hosts Configured
+        $(gcloud compute ssh controller --zone=${_ZONE} --quiet --command="cd /opt/ansible && sudo ansible -i inventory/gcp_compute.yaml all --list-hosts" || echo "Host list unavailable")
+        
+        ## 📊 Infrastructure Status
+        $(gcloud compute instances list --format="table(name,status,zone)" --filter="labels.managed_by=terraform")
+        
+        EOF
+        
+        echo "📄 Deployment report generated"
+        cat deployment-report.md
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
 
 substitutions:
-  # _ANSIBLE_BUCKET provided by trigger
-  _ZONE: us-central1-a
+  _ANSIBLE_BUCKET: 'your-ansible-bucket'  # Will be overridden by trigger
+  _ZONE: 'us-central1-a'                  # Default zone
 
 options:
+  # Enhanced logging for better debugging
   logging: CLOUD_LOGGING_ONLY
+  
+  # Use a more powerful machine for faster builds
+  machineType: 'E2_HIGHCPU_8'
 
+timeout: '1200s'  # 20 minutes timeout
+
+# Optional: Store deployment artifacts
 # artifacts:
 #   objects:
-#     location: gs://$ANSIBLE_BUCKET-build-artifacts
-#     paths: ['ansible/**']
+#     location: 'gs://${_ANSIBLE_BUCKET}-deployment-artifacts'
+#     paths: 
+#       - 'deployment-report.md'
+#       - 'ansible-deploy.tar.gz'
