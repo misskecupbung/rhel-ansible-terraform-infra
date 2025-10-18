@@ -200,7 +200,7 @@ jobs:
       - name: "Create Ansible Archive"
         run: |
           # Create archive excluding terraform directory and CI files
-          tar -czf --warning=no-file-changed ansible-configs.tar.gz \
+          tar --warning=no-file-changed -czf ansible-configs.tar.gz \
             --exclude='terraform' \
             --exclude='.github' \
             --exclude='.git' \
